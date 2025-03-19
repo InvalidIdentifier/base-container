@@ -1,0 +1,39 @@
+workflow:
+  name: 'base-container'
+
+stages:
+  - deploy_containers
+  - send_notification
+
+before_script:
+  - |
+    # create ssh 
+    mkdir -p ~/.ssh
+
+    eval $(ssh-agent -s)
+
+    cp "$SSH_PRIV_KEY_ED25519_FILE" ~/.ssh/id_ed25519 && chmod 400 ~/.ssh/id_ed25519
+    cp "$SSH_PUB_KEY_ED25519_FILE" ~/.ssh/id_ed25519.pub
+
+    ssh-add ~/.ssh/id_ed25519
+
+    chmod 700 ~/.ssh
+
+deploy_containers:
+  stage: deploy_containers
+  image: registry.${DOMAIN}/glrunner:ansible
+  script:
+    - |
+      ####  node containerdeployment ####
+      
+      ANSIBLE_CONFIG=/${CI_BUILDS_DIR}/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}/ansible.cfg ansible-playbook playbooks/main.yml -i inventory.yml
+
+send_notification:
+  stage: send_notification
+  image: registry.${DOMAIN}/glrunner:base
+  script:
+    - |
+      ####  send notifications ####
+      curl -H "X-Tags: robot" -u :$NTFY_TOKEN -d "Pipeline - $CI_PIPELINE_NAME - was successfull" https://notify.${DOMAIN}/pipelines
+  needs: 
+    - deploy_containers
