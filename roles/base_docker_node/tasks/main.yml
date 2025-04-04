@@ -1,4 +1,40 @@
 ---
+# install targetcli for iSCSI
+- name: install iSCSI targetcli tools
+  apt:
+    name: targetcli-fb
+    state: present
+  become: true
+
+# create iSCSI image file (3.5 TB)
+- name: create iSCSI image for proxmox
+  command: fallocate -l 3.5T /mnt/raid/iscsi_proxmox.img
+  args:
+    creates: /mnt/raid/iscsi_proxmox.img
+
+# create iSCSI target and backstore
+- name: create iSCSI target config
+  blockinfile:
+    path: /tmp/setup_iscsi_proxmox.tcli
+    create: yes
+    block: |
+      backstores/fileio create proxmox_disk /mnt/raid/iscsi_proxmox.img
+      iscsi/ create iqn.2025-04.local.{{ ansible_nodename }}:proxmox
+      iscsi/iqn.2025-04.local.{{ ansible_nodename }}:proxmox/tpg1/luns create /backstores/fileio/proxmox_disk
+      iscsi/iqn.2025-04.local.{{ ansible_nodename }}:proxmox/tpg1/acls create iqn.client.proxmox
+      saveconfig
+
+- name: apply iSCSI configuration with targetcli
+  command: targetcli < /tmp/setup_iscsi_proxmox.tcli
+  become: true
+
+# enable and start iSCSI target service
+- name: enable and start iSCSI target service
+  systemd:
+    name: target
+    enabled: true
+    state: started
+
 # create directory for bindmount folders
 - name: create directory bindmounts
   file:
